@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# VS Code
+.vscode/
+
+# Datasets
+data/
+datasets/
+
+# Generated feature matrices / results
+features/
+outputs/
+results/
+
+# Large numerical files
+*.npy
+*.npz
+*.pt
+*.pth
+*.pkl
+
+# Logs
+*.log
+
+/test_images/*
+!/test_images/.gitkeep
