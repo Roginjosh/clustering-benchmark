@@ -34,3 +34,5 @@ results/
 
 /test_images/*
 !/test_images/.gitkeep
+# Generated dataset distribution archives
+*.tar.gz
