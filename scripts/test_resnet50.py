@@ -3,11 +3,10 @@ from pathlib import Path
 from PIL import Image
 import torch
 
-from src.features.resnet50_extractor import (
+from src.extraction.resnet50 import (
     FEATURE_DIMS,
     ResNet50Extractor,
 )
-
 
 def main() -> None:
     image_dir = Path("test_images")
@@ -20,7 +19,7 @@ def main() -> None:
 
     if not image_paths:
         raise RuntimeError(
-            "No test images found. Put a JPG or PNG in test_images/."
+            "No test images found. Put JPG or PNG images in test_images/."
         )
 
     print(f"Found {len(image_paths)} test image(s).")
@@ -39,17 +38,32 @@ def main() -> None:
     batch = torch.stack(tensors)
 
     print(f"Input batch: {tuple(batch.shape)}")
+    print()
 
     features = extractor(batch)
 
     for layer, tensor in features.items():
-        expected_dim = FEATURE_DIMS[layer]
+        expected_shape = (
+            len(image_paths),
+            FEATURE_DIMS[layer],
+        )
+
+        actual_shape = tuple(tensor.shape)
+
+        status = "PASS" if actual_shape == expected_shape else "FAIL"
 
         print(
             f"{layer:6s} "
-            f"shape={tuple(tensor.shape)} "
-            f"expected_dim={expected_dim}"
+            f"shape={actual_shape} "
+            f"expected={expected_shape} "
+            f"[{status}]"
         )
+
+    print()
+    print("Images processed:")
+
+    for i, path in enumerate(image_paths):
+        print(f"  {i}: {path.name}")
 
 
 if __name__ == "__main__":
