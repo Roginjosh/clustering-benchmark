@@ -8,7 +8,6 @@ import torch.nn.functional as F
 from torchvision.models import ResNet50_Weights, resnet50
 
 
-# Dimensionality of the representation produced at each extraction point.
 FEATURE_DIMS = {
     "stem": 64,
     "layer1": 256,
@@ -27,6 +26,15 @@ def get_default_device() -> torch.device:
         return torch.device("mps")
 
     return torch.device("cpu")
+
+
+def get_resnet50_preprocessing():
+    """
+    Return the preprocessing transform associated with the pretrained
+    ResNet-50 weights used by this project.
+    """
+    weights = ResNet50_Weights.DEFAULT
+    return weights.transforms()
 
 
 class ResNet50Extractor(nn.Module):
@@ -52,7 +60,6 @@ class ResNet50Extractor(nn.Module):
     ) -> None:
         super().__init__()
 
-        # Extract every representation unless specific layers are requested.
         if layers is None:
             layers = FEATURE_DIMS.keys()
 
@@ -66,22 +73,15 @@ class ResNet50Extractor(nn.Module):
                 f"Valid layers are: {list(FEATURE_DIMS)}"
             )
 
-        # Select CUDA, MPS, or CPU automatically.
         if device is None:
             device = get_default_device()
 
         self.device = torch.device(device)
 
-        # Official torchvision ImageNet-pretrained weights.
         weights = ResNet50_Weights.DEFAULT
-
-        # Save the exact preprocessing associated with those weights.
         self.preprocessing = weights.transforms()
-
-        # Load pretrained ResNet-50.
         self.model = resnet50(weights=weights)
 
-        # We are only extracting features.
         self.model.eval()
 
         for parameter in self.model.parameters():
@@ -91,17 +91,6 @@ class ResNet50Extractor(nn.Module):
 
     @staticmethod
     def _pool(x: torch.Tensor) -> torch.Tensor:
-        """
-        Convert:
-
-            B x C x H x W
-
-        into:
-
-            B x C
-
-        using global average pooling.
-        """
         return F.adaptive_avg_pool2d(x, output_size=1).flatten(1)
 
     @torch.inference_mode()
@@ -114,10 +103,6 @@ class ResNet50Extractor(nn.Module):
 
         features: dict[str, torch.Tensor] = {}
 
-        # ---------------------------------------------------------
-        # Stem
-        # ---------------------------------------------------------
-
         x = self.model.conv1(x)
         x = self.model.bn1(x)
         x = self.model.relu(x)
@@ -125,10 +110,6 @@ class ResNet50Extractor(nn.Module):
 
         if "stem" in self.layers:
             features["stem"] = self._pool(x)
-
-        # ---------------------------------------------------------
-        # Residual stages
-        # ---------------------------------------------------------
 
         x = self.model.layer1(x)
 
