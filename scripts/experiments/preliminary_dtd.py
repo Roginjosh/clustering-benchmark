@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 from sklearn.cluster import KMeans
+from tqdm.auto import tqdm
 from sklearn.metrics import (
     adjusted_rand_score,
     normalized_mutual_info_score,
@@ -11,7 +12,7 @@ from sklearn.metrics import (
     v_measure_score,
 )
 
-DATA_DIR = Path("data/dtd")
+DATA_DIR = Path("outputs/dtd")
 
 REPRESENTATIONS = {
     "stem": 64,
@@ -35,7 +36,12 @@ def main():
 
     results = []
 
-    for name, expected_dim in REPRESENTATIONS.items():
+    for name, expected_dim in tqdm(
+	REPRESENTATIONS.items(),
+	total=len(REPRESENTATIONS),
+	desc="K-means DTD",
+	unit="representation",
+    ):
         print(f"Running {name} ({expected_dim}D)...")
 
         X = np.load(DATA_DIR / f"{name}.npy")
