@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Python environments
+.venv/
+venv/
+
+# G-CEALS generated files
+data/
+models/
+debug/
+predictions/
+
+# Large numerical datasets
+*.npy
+*.npz
+*.pt
+*.pth
+*.tar.gz
+
+# Training logs
+*.log
+
+# Backup files
+*.bak
+*.bak_dtd
