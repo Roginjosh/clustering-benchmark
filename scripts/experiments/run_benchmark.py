@@ -1,0 +1,401 @@
+
+#!/usr/bin/env python3
+"""Shared numerical-feature clustering benchmark (K-means and GMM)."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import resource
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import numpy as np
+from sklearn.cluster import KMeans
+from sklearn.metrics import (
+    adjusted_mutual_info_score,
+    adjusted_rand_score,
+    completeness_score,
+    homogeneity_score,
+    normalized_mutual_info_score,
+    v_measure_score,
+)
+from sklearn.preprocessing import StandardScaler
+
+from src.clustering.gmm import run_gmm
+
+
+FIELDS = [
+    "dataset",
+    "representation",
+    "algorithm",
+    "seed",
+    "samples",
+    "dimensions",
+    "n_clusters",
+    "n_init",
+    "preprocessing",
+    "covariance_type",
+    "reg_covar",
+    "max_iter",
+    "threads",
+    "ari",
+    "nmi",
+    "ami",
+    "homogeneity",
+    "completeness",
+    "v_measure",
+    "clusters_used",
+    "converged",
+    "iterations",
+    "fit_seconds",
+    "peak_rss_mb",
+    "status",
+    "error",
+]
+
+
+def worker(args):
+    """Execute one algorithm/representation/seed combination."""
+
+    from threadpoolctl import threadpool_limits
+
+    # The parent passes one value per worker, but argparse
+    # stores these arguments as lists because of nargs="+".
+    representation = args.representations[0]
+    algorithm = args.algorithms[0]
+    seed = args.seeds[0]
+
+    data_dir = Path(args.data_dir)
+
+    y = np.load(data_dir / "labels.npy")
+    X = np.load(data_dir / f"{representation}.npy")
+
+    if X.ndim != 2 or y.ndim != 1 or len(y) != len(X):
+        raise ValueError("Incompatible features and labels")
+
+    if not np.isfinite(X).all():
+        raise ValueError("Features contain NaN or infinity")
+
+    # Shared preprocessing for every algorithm.
+    X = StandardScaler().fit_transform(X)
+    X = X.astype(np.float64, copy=False)
+
+    n_clusters = len(np.unique(y))
+
+    result = {
+        "dataset": args.dataset,
+        "representation": representation,
+        "algorithm": algorithm,
+        "seed": seed,
+        "samples": len(y),
+        "dimensions": X.shape[1],
+        "n_clusters": n_clusters,
+        "n_init": args.n_init,
+        "preprocessing": "standard",
+        "covariance_type": (
+            args.covariance_type if algorithm == "gmm" else ""
+        ),
+        "reg_covar": (
+            args.reg_covar if algorithm == "gmm" else ""
+        ),
+        "max_iter": args.max_iter,
+        "threads": args.threads,
+    }
+
+    # Restrict native numerical-library threads consistently.
+    with threadpool_limits(limits=args.threads):
+
+        start = time.perf_counter()
+
+        if algorithm == "kmeans":
+            model = KMeans(
+                n_clusters=n_clusters,
+                random_state=seed,
+                n_init=args.n_init,
+                max_iter=args.max_iter,
+            )
+
+            pred = model.fit_predict(X)
+
+            info = {
+                "converged": "",
+                "iterations": int(model.n_iter_),
+            }
+
+        elif algorithm == "gmm":
+            pred, details = run_gmm(
+                X,
+                n_clusters=n_clusters,
+                covariance_type=args.covariance_type,
+                n_init=args.n_init,
+                reg_covar=args.reg_covar,
+                max_iter=args.max_iter,
+                random_state=seed,
+                return_info=True,
+            )
+
+            info = {
+                "converged": details["converged"],
+                "iterations": details["n_iter"],
+            }
+
+        else:
+            raise ValueError(f"Unknown algorithm: {algorithm}")
+
+        elapsed = time.perf_counter() - start
+
+    # Peak resident memory of this dedicated subprocess.
+    # Includes interpreter, imports, data loading, preprocessing,
+    # and fitting. It is not incremental fit-only memory.
+    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+
+    if sys.platform == "darwin":
+        peak_mb = rss / (1024 * 1024)
+    else:
+        peak_mb = rss / 1024
+
+    result.update(
+        info,
+        fit_seconds=round(elapsed, 6),
+        peak_rss_mb=round(peak_mb, 2),
+        ari=float(adjusted_rand_score(y, pred)),
+        nmi=float(normalized_mutual_info_score(y, pred)),
+        ami=float(adjusted_mutual_info_score(y, pred)),
+        homogeneity=float(homogeneity_score(y, pred)),
+        completeness=float(completeness_score(y, pred)),
+        v_measure=float(v_measure_score(y, pred)),
+        clusters_used=int(np.unique(pred).size),
+        status="ok",
+        error="",
+    )
+
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+
+    parser.add_argument(
+        "--data-dir",
+        default="outputs/dtd",
+    )
+
+    parser.add_argument(
+        "--dataset",
+        default="dtd",
+    )
+
+    parser.add_argument(
+        "--representations",
+        nargs="+",
+        default=["stem", "layer4"],
+    )
+
+    parser.add_argument(
+        "--algorithms",
+        nargs="+",
+        choices=["kmeans", "gmm"],
+        default=["kmeans", "gmm"],
+    )
+
+    parser.add_argument(
+        "--seeds",
+        nargs="+",
+        type=int,
+        default=[42],
+    )
+
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=4,
+    )
+
+    parser.add_argument(
+        "--n-init",
+        type=int,
+        default=1,
+    )
+
+    parser.add_argument(
+        "--max-iter",
+        type=int,
+        default=200,
+    )
+
+    parser.add_argument(
+        "--covariance-type",
+        choices=["diag", "spherical", "tied", "full"],
+        default="diag",
+    )
+
+    parser.add_argument(
+        "--reg-covar",
+        type=float,
+        default=1e-4,
+    )
+
+    parser.add_argument(
+        "--output",
+        default="outputs/benchmark/dtd_results.csv",
+    )
+
+    parser.add_argument(
+        "--_worker",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+
+    args = parser.parse_args()
+
+    if args.threads < 1:
+        parser.error("--threads must be positive")
+
+    if args.n_init < 1:
+        parser.error("--n-init must be positive")
+
+    if args.max_iter < 1:
+        parser.error("--max-iter must be positive")
+
+    if args._worker:
+        if (
+            len(args.representations) != 1
+            or len(args.algorithms) != 1
+            or len(args.seeds) != 1
+        ):
+            parser.error(
+                "Worker requires exactly one representation, "
+                "algorithm, and seed"
+            )
+
+        print(json.dumps(worker(args)))
+        return
+
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    total_runs = (
+        len(args.representations)
+        * len(args.algorithms)
+        * len(args.seeds)
+    )
+
+    print("Unified Clustering Benchmark")
+    print(f"Dataset: {args.dataset}")
+    print(f"Data directory: {args.data_dir}")
+    print(f"Representations: {args.representations}")
+    print(f"Algorithms: {args.algorithms}")
+    print(f"Seeds: {args.seeds}")
+    print(f"Threads per fit: {args.threads}")
+    print(f"Total runs: {total_runs}")
+    print()
+
+    run_number = 0
+
+    with output_path.open("w", newline="") as handle:
+
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=FIELDS,
+        )
+
+        writer.writeheader()
+
+        for representation in args.representations:
+            for algorithm in args.algorithms:
+                for seed in args.seeds:
+
+                    run_number += 1
+
+                    command = [
+                        sys.executable,
+                        "-m",
+                        "scripts.experiments.run_benchmark",
+                        "--_worker",
+                        "--data-dir",
+                        args.data_dir,
+                        "--dataset",
+                        args.dataset,
+                        "--representations",
+                        representation,
+                        "--algorithms",
+                        algorithm,
+                        "--seeds",
+                        str(seed),
+                        "--threads",
+                        str(args.threads),
+                        "--n-init",
+                        str(args.n_init),
+                        "--max-iter",
+                        str(args.max_iter),
+                        "--covariance-type",
+                        args.covariance_type,
+                        "--reg-covar",
+                        str(args.reg_covar),
+                    ]
+
+                    print(
+                        f"[{run_number}/{total_runs}] "
+                        f"{representation:7s} "
+                        f"{algorithm:6s} "
+                        f"seed={seed}: ",
+                        end="",
+                        flush=True,
+                    )
+
+                    completed = subprocess.run(
+                        command,
+                        capture_output=True,
+                        text=True,
+                    )
+
+                    if completed.returncode == 0:
+
+                        try:
+                            row = json.loads(completed.stdout)
+                        except json.JSONDecodeError as exc:
+                            row = {
+                                "dataset": args.dataset,
+                                "representation": representation,
+                                "algorithm": algorithm,
+                                "seed": seed,
+                                "status": "error",
+                                "error": f"Invalid worker JSON: {exc}",
+                            }
+
+                        if row.get("status") == "ok":
+                            print(
+                                f"ARI={row['ari']:.4f} "
+                                f"NMI={row['nmi']:.4f} "
+                                f"AMI={row['ami']:.4f} "
+                                f"time={row['fit_seconds']:.2f}s "
+                                f"peakRSS={row['peak_rss_mb']:.0f}MB"
+                            )
+                        else:
+                            print("ERROR", row.get("error", ""))
+
+                    else:
+                        row = {
+                            "dataset": args.dataset,
+                            "representation": representation,
+                            "algorithm": algorithm,
+                            "seed": seed,
+                            "status": "error",
+                            "error": completed.stderr.strip()[-1500:],
+                        }
+
+                        print("ERROR", row["error"][-250:])
+
+                    writer.writerow(row)
+                    handle.flush()
+
+    print()
+    print(f"Results saved: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
