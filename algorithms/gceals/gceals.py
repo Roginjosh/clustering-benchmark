@@ -344,9 +344,23 @@ def train(ae_model, data_tensor, y_actual, args):
             y_pred = full_p.argmax(1).cpu().numpy()
             
             w_new = (full_p.sum(dim=0) / (full_p.shape[0])).reshape(1, -1) #/ 100 args.n_clusters*
+            if epoch == 0:
+                print(
+                    f"Initial Gaussian assignments: "
+                    f"min_weight={w_new.min().item():.8f}, "
+                    f"max_weight={w_new.max().item():.8f}, "
+                    f"clusters_below_threshold="
+                    f"{(w_new < min_w).sum().item()}"
+                )
             w = w if epoch == 0 else w_new
             print(w) # Diagonostics 
             freeze_z = w.min() <= min_w
+            print(
+                f"Epoch {epoch}: "
+                f"min_weight={w.min().item():.8f}, "
+                f"threshold={min_w:.8f}, "
+                f"early_stop={freeze_z.item()}"
+            )
             
             if epoch==0 or epoch==args.finetune_epochs:
                 if (args.update_interval == 1 and epoch % args.plot_interval == 0):
@@ -406,6 +420,7 @@ def train(ae_model, data_tensor, y_actual, args):
                 update_epoch_list.append(epoch)
                 full_z_list.append(z.cpu().numpy())
                 y_pred_list.append(y_pred)
+                print(f"Early stopping triggered at epoch {epoch}")
                 break
 
         model.train()
@@ -491,7 +506,7 @@ def train(ae_model, data_tensor, y_actual, args):
 if __name__ == "__main__":
     # setting the hyper parameters
     import argparse
-    from utils.openml import get_data
+    # from utils.openml import get_data
 
     parser = argparse.ArgumentParser(description='train',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -578,6 +593,7 @@ if __name__ == "__main__":
         print('Loaded DTD features:', X_actual.shape,
               'classes:', len(features.class_names), 'layers:', features.layer_dimensions)
     else:
+        from utils.openml import get_data
         X_actual, y_actual = get_data(args.dataset)
     n_classes = len(np.unique(y_actual))
     

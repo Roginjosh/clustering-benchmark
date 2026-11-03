@@ -26,6 +26,7 @@ from sklearn.metrics import (
 from sklearn.preprocessing import StandardScaler
 
 from src.clustering.gmm import run_gmm
+from src.clustering.gceals import run_gceals
 
 
 FIELDS = [
@@ -143,6 +144,27 @@ def worker(args):
                 "iterations": details["n_iter"],
             }
 
+        elif algorithm == "gceals":
+            pred = run_gceals(
+                X,
+                y,
+                n_clusters=n_clusters,
+                random_state=seed,
+                device=args.gceals_device,
+                latent_dim=args.gceals_latent_dim,
+                batch_size=args.gceals_batch_size,
+                pretrain_epochs=args.gceals_pretrain_epochs,
+                finetune_epochs=args.gceals_finetune_epochs,
+                learning_rate=args.gceals_lr,
+                gamma=args.gceals_gamma,
+                stop_w_factor=args.gceals_stop_w_factor,
+            )
+
+            info = {
+                "converged": "",
+                "iterations": "",
+            }
+
         else:
             raise ValueError(f"Unknown algorithm: {algorithm}")
 
@@ -198,7 +220,7 @@ def main():
     parser.add_argument(
         "--algorithms",
         nargs="+",
-        choices=["kmeans", "gmm"],
+        choices=["kmeans", "gmm", "gceals"],
         default=["kmeans", "gmm"],
     )
 
@@ -249,6 +271,15 @@ def main():
         action="store_true",
         help=argparse.SUPPRESS,
     )
+
+    parser.add_argument("--gceals-device", default="cpu")
+    parser.add_argument("--gceals-latent-dim", type=int, default=10)
+    parser.add_argument("--gceals-batch-size", type=int, default=256)
+    parser.add_argument("--gceals-pretrain-epochs", type=int, default=100)
+    parser.add_argument("--gceals-finetune-epochs", type=int, default=100)
+    parser.add_argument("--gceals-lr", type=float, default=1e-5)
+    parser.add_argument("--gceals-gamma", type=float, default=0.1)
+    parser.add_argument("--gceals-stop-w-factor", type=float, default=0.1)
 
     args = parser.parse_args()
 
@@ -336,6 +367,14 @@ def main():
                         args.covariance_type,
                         "--reg-covar",
                         str(args.reg_covar),
+                        "--gceals-device", args.gceals_device,
+                        "--gceals-latent-dim", str(args.gceals_latent_dim),
+                        "--gceals-batch-size", str(args.gceals_batch_size),
+                        "--gceals-pretrain-epochs", str(args.gceals_pretrain_epochs),
+                        "--gceals-finetune-epochs", str(args.gceals_finetune_epochs),
+                        "--gceals-lr", str(args.gceals_lr),
+                        "--gceals-gamma", str(args.gceals_gamma),
+                        "--gceals-stop-w-factor", str(args.gceals_stop_w_factor),
                     ]
 
                     print(
