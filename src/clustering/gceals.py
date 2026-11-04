@@ -69,6 +69,7 @@ def run_gceals(
         timed=True,
         redo_pretrain=True,
         plot_interval=100,
+        random_state=random_state,
     )
     Path("debug").mkdir(parents=True, exist_ok=True)
     data_tensor = torch.as_tensor(

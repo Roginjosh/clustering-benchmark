@@ -12,6 +12,15 @@ ALGORITHMS ?= kmeans gmm
 REPRESENTATIONS ?= stem layer4
 SEEDS ?= 0 1 2 3 4
 THREADS ?= 4
+GCEALS_DEVICE ?= cpu
+GCEALS_LATENT_DIM ?= 10
+GCEALS_BATCH_SIZE ?= 256
+GCEALS_PRETRAIN_EPOCHS ?= 100
+GCEALS_FINETUNE_EPOCHS ?= 100
+GCEALS_LR ?= 1e-5
+GCEALS_GAMMA ?= 0.1
+GCEALS_STOP_W_FACTOR ?= 0.1
+
 
 RUNNER = $(PYTHON) -m scripts.experiments.run_benchmark
 
@@ -78,8 +87,16 @@ benchmark:
 		--algorithms $(ALGORITHMS) \
 		--seeds $(SEEDS) \
 		--threads $(THREADS) \
+		--gceals-device $(GCEALS_DEVICE) \
+		--gceals-latent-dim $(GCEALS_LATENT_DIM) \
+		--gceals-batch-size $(GCEALS_BATCH_SIZE) \
+		--gceals-pretrain-epochs $(GCEALS_PRETRAIN_EPOCHS) \
+		--gceals-finetune-epochs $(GCEALS_FINETUNE_EPOCHS) \
+		--gceals-lr $(GCEALS_LR) \
+		--gceals-gamma $(GCEALS_GAMMA) \
+		--gceals-stop-w-factor $(GCEALS_STOP_W_FACTOR) \
 		--output $(OUTPUT_DIR)/$(DATASET)_custom.csv
-
+		
 summary:
 	$(PYTHON) -m scripts.experiments.summarize_benchmark \
 		--input $(OUTPUT_DIR)/dtd_multiseed.csv \

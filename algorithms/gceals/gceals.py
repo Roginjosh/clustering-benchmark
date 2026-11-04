@@ -19,9 +19,6 @@ from utils.debug import *
 from utils.dataloader import EqualLoader
 
 
-torch.manual_seed(42)
-np.random.seed(42)
-
 if torch.cuda.is_available():
     print("CUDA available")
 
@@ -260,9 +257,12 @@ def train(ae_model, data_tensor, y_actual, args):
     init_centroids = None
     init_covs = None
     
-
-    kmeans = KMeans(n_clusters=args.n_clusters,
-                    init="k-means++", n_init='auto', random_state=42)
+    kmeans = KMeans(
+        n_clusters=args.n_clusters,
+        init="k-means++",
+        n_init="auto",
+        random_state=args.random_state,
+    )
     y_pred_last = kmeans.fit_predict(Z)
     kmeans_y = torch.tensor(y_pred_last).long().to(args.device)
 
