@@ -27,6 +27,7 @@ from sklearn.preprocessing import StandardScaler
 
 from src.clustering.gmm import run_gmm
 from src.clustering.gceals import run_gceals
+from src.clustering.som import run_som
 
 
 FIELDS = [
@@ -144,6 +145,23 @@ def worker(args):
                 "iterations": details["n_iter"],
             }
 
+        elif algorithm == "som":
+            pred = run_som(
+                X,
+                n_clusters=n_clusters,
+                random_state=seed,
+                grid_x=args.som_grid_x,
+                grid_y=args.som_grid_y,
+                sigma=args.som_sigma,
+                learning_rate=args.som_learning_rate,
+                iterations=args.som_iterations,
+            )
+
+            info = {
+                "converged": "",
+                "iterations": args.som_iterations,
+            }
+
         elif algorithm == "gceals":
             pred = run_gceals(
                 X,
@@ -220,7 +238,7 @@ def main():
     parser.add_argument(
         "--algorithms",
         nargs="+",
-        choices=["kmeans", "gmm", "gceals"],
+        choices=["kmeans", "gmm", "gceals", "som"],
         default=["kmeans", "gmm"],
     )
 
@@ -280,6 +298,12 @@ def main():
     parser.add_argument("--gceals-lr", type=float, default=1e-5)
     parser.add_argument("--gceals-gamma", type=float, default=0.1)
     parser.add_argument("--gceals-stop-w-factor", type=float, default=0.1)
+
+    parser.add_argument("--som-grid-x", type=int, default=10)
+    parser.add_argument("--som-grid-y", type=int, default=10)
+    parser.add_argument("--som-sigma", type=float, default=1.0)
+    parser.add_argument("--som-learning-rate", type=float, default=0.5)
+    parser.add_argument("--som-iterations", type=int, default=10000)
 
     args = parser.parse_args()
 
@@ -375,6 +399,11 @@ def main():
                         "--gceals-lr", str(args.gceals_lr),
                         "--gceals-gamma", str(args.gceals_gamma),
                         "--gceals-stop-w-factor", str(args.gceals_stop_w_factor),
+                        "--som-grid-x", str(args.som_grid_x),
+                        "--som-grid-y", str(args.som_grid_y),
+                        "--som-sigma", str(args.som_sigma),
+                        "--som-learning-rate", str(args.som_learning_rate),
+                        "--som-iterations", str(args.som_iterations),
                     ]
 
                     print(
