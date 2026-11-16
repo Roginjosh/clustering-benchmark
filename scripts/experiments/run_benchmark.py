@@ -79,6 +79,19 @@ def worker(args):
     if X.ndim != 2 or y.ndim != 1 or len(y) != len(X):
         raise ValueError("Incompatible features and labels")
 
+    if args.max_samples is not None:
+        if args.max_samples < 1:
+            raise ValueError("--max-samples must be at least 1")
+
+        if args.max_samples > len(y):
+            raise ValueError(
+                f"--max-samples={args.max_samples} exceeds "
+                f"dataset size {len(y)}"
+            )
+
+        X = X[:args.max_samples]
+        y = y[:args.max_samples]
+
     if not np.isfinite(X).all():
         raise ValueError("Features contain NaN or infinity")
 
@@ -254,6 +267,15 @@ def main():
         type=int,
         default=4,
     )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        help=(
+            "Use only the first N observations. "
+            "Useful for deterministic nested scaling experiments."
+        ),
+    )
 
     parser.add_argument(
         "--n-init",
@@ -282,6 +304,12 @@ def main():
     parser.add_argument(
         "--output",
         default="outputs/benchmark/dtd_results.csv",
+    )
+
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Skip runs that already have a successful checkpoint.",
     )
 
     parser.add_argument(
@@ -333,6 +361,9 @@ def main():
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    checkpoint_dir = output_path.parent / "runs"
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
     total_runs = (
         len(args.representations)
         * len(args.algorithms)
@@ -366,6 +397,43 @@ def main():
 
                     run_number += 1
 
+                    sample_tag = (
+                        str(args.max_samples)
+                        if args.max_samples is not None
+                        else "full"
+                    )
+
+                    checkpoint_path = checkpoint_dir / (
+                        f"{args.dataset}_"
+                        f"{representation}_"
+                        f"{algorithm}_"
+                        f"seed{seed}_"
+                        f"n{sample_tag}.csv"
+                    )
+
+                    # Resume from an already successful checkpoint.
+                    if args.resume and checkpoint_path.exists():
+                        try:
+                            with checkpoint_path.open(newline="") as checkpoint_handle:
+                                checkpoint_reader = csv.DictReader(checkpoint_handle)
+                                checkpoint_row = next(checkpoint_reader)
+
+                            if checkpoint_row.get("status") == "ok":
+                                writer.writerow(checkpoint_row)
+                                handle.flush()
+
+                                print(
+                                    f"[{run_number}/{total_runs}] "
+                                    f"{representation:7s} "
+                                    f"{algorithm:6s} "
+                                    f"seed={seed}: "
+                                    f"SKIPPED (checkpoint complete)"
+                                )
+                                continue
+
+                        except (OSError, StopIteration):
+                            # Invalid/incomplete checkpoint: rerun normally.
+                            pass
                     command = [
                         sys.executable,
                         "-m",
@@ -405,6 +473,14 @@ def main():
                         "--som-learning-rate", str(args.som_learning_rate),
                         "--som-iterations", str(args.som_iterations),
                     ]
+
+                    if args.max_samples is not None:
+                        command.extend(
+                            [
+                                "--max-samples",
+                                str(args.max_samples),
+                            ]
+                        )
 
                     print(
                         f"[{run_number}/{total_runs}] "
@@ -460,6 +536,17 @@ def main():
 
                     writer.writerow(row)
                     handle.flush()
+
+                    # Save this run independently. This protects completed results
+                    # if a later seed fails or the benchmark is interrupted.
+                    with checkpoint_path.open("w", newline="") as checkpoint_handle:
+                        checkpoint_writer = csv.DictWriter(
+                            checkpoint_handle,
+                            fieldnames=FIELDS,
+                        )
+                        checkpoint_writer.writeheader()
+                        checkpoint_writer.writerow(row)
+                        checkpoint_handle.flush()
 
     print()
     print(f"Results saved: {output_path}")
