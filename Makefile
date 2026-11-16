@@ -99,9 +99,9 @@ benchmark:
 		
 summary:
 	$(PYTHON) -m scripts.experiments.summarize_benchmark \
-		--input $(OUTPUT_DIR)/dtd_multiseed.csv \
-		--output-csv $(OUTPUT_DIR)/dtd_summary.csv \
-		--output-tex $(OUTPUT_DIR)/dtd_summary.tex
+		--input $(OUTPUT_DIR)/$(DATASET)_custom.csv \
+		--output-csv $(OUTPUT_DIR)/$(DATASET)_summary.csv \
+		--output-tex $(OUTPUT_DIR)/$(DATASET)_summary.tex
 
 clean-results:
 	@echo "To avoid accidental data loss, results are not deleted automatically."

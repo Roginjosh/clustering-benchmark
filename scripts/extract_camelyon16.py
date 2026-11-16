@@ -10,8 +10,8 @@ from src.datasets.camelyon16 import CAMELYON16Dataset
 from src.extraction.runner import extract_features
 
 
-DATASET_ROOT = Path.home() / "datasets/CAMELYON16/patches_v2"
-MANIFEST_PATH = Path("data/camelyon16/manifest_001_050.csv")
+DATASET_ROOT = Path.home() / "datasets/camelyon16/patches_v2"
+MANIFEST_PATH = Path("data/camelyon16/manifest_001_110.csv")
 OUTPUT_DIR = Path("outputs/camelyon16")
 
 LAYERS = [
